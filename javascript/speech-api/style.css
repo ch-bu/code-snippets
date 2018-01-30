@@ -1,0 +1,41 @@
+body {
+  margin: 0;
+  background-color: #000;
+}
+
+#results {
+  margin: 0 auto;
+  width: 40%;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 80% 20%;
+  grid-template-areas: "speech speech speech"
+                       "start  stop   speak";
+}
+
+
+#final_transcript {
+  grid-area: speech;
+  font-size: 1.4rem;
+  overflow-y: scroll;
+  background: linear-gradient(141deg, #1a9c99 0%, #7a4d66 75%);
+  padding: 10px;
+  border-radius: 4px;
+  color: #fff;
+}
+
+#start {
+  grid-area: start;
+  background-color: #ff8fa6;
+}
+
+#stop {
+  grid-area: stop;
+  background-color: #1a9c99;
+}
+
+#speak {
+  grid-area: speak;
+  background-color:	#7a4d66;
+}
