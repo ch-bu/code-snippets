@@ -1,0 +1,89 @@
+$min-screen: 320px;
+$max-screen: 1366px;
+$min-value: 16px;
+$max-value: 24px;
+//
+// @function strip-units($number) {
+//   @return $number / ($number * 0 + 1);
+// }
+//
+// @mixin fluid-type($min-screen,$max-screen,  $min-font, $max-font) {
+//   // font-size: calc(#{$min-screen} + (#{$max-font} - #{$min-font}) * (100vw - #{$min-screen}) / (#{$max-screen} - #{$min-screen}));
+//   font-size: calc(#{$min-font} + (#{strip-units($max-font)} - #{strip-units($min-font)}) * (100vw - #{$min-screen}) / (#{strip-units($max-screen)} - #{strip-units($min-screen)}));
+//   // font-size: calc(#{$min-screen} + (#{$max-font} - #{$min-font}) * (100vw - #{$min-screen}));
+// }
+//
+// html {
+//   @include fluid-type($min-screen,$max-screen,  $min-font, $max-font);
+// }
+//
+body {
+  font-family: 'Libre Baskerville', serif;
+  line-height: 1.45;
+  color: #333;
+}
+
+// I'm now recommending this technique:
+
+@mixin interpolate($properties, $min-screen, $max-screen, $min-value, $max-value) {
+	& {
+		@each $property in $properties {
+			#{$property}: $min-value;
+		}
+
+		@media screen and (min-width: $min-screen) {
+			@each $property in $properties {
+				#{$property}: calc-interpolation($min-screen, $min-value, $max-screen, $max-value);
+			}
+		}
+
+		@media screen and (min-width: $max-screen) {
+			@each $property in $properties {
+				#{$property}: $max-value;
+			}
+		}
+	}
+}
+
+// Requires the calc-interpolation function which can also be used independently
+
+@function calc-interpolation($min-screen, $min-value, $max-screen, $max-value) {
+	$a: ($max-value - $min-value) / ($max-screen - $min-screen);
+	$b: $min-value - $a * $min-screen;
+
+	$sign: "+";
+	@if ($b < 0) {
+		$sign: "-";
+		$b: abs($b);
+	}
+	@return calc(#{$a*100}vw #{$sign} #{$b});
+}
+
+// Indrek Pass also has a fantastic mixin here: http://sassmeister.com/gist/7f22e44ace49b5124eec
+
+
+/* Single property */
+html {
+	@include interpolate(font-size, $min-screen, $max-screen, $min-value, $max-value);
+}
+
+/* Multiple properties with same values */
+h1,h2,h3,h4,h5 {
+	@include interpolate((padding-top, padding-bottom), 20rem, 70rem, 0rem, .5rem);
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 3.998em;
+}
+
+h2 {font-size: 2.827em;}
+
+h3 {font-size: 1.999em;}
+
+h4 {font-size: 1.414em;}
+
+p {font-size: 1.2em; }
+
+
+small, .font_small {font-size: 0.707em;}
