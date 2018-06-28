@@ -1,0 +1,145 @@
+---
+title: "Konstraste in R"
+subtitle: "Eine lautes Denken"
+author: "Christian Burkhart"
+date: "`r Sys.Date()`"
+output:
+  tufte::tufte_html: default
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+bibliography: skeleton.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+library(tufte)
+library(tidyverse)
+library(emmeans)
+library(car)
+# invalidate cache when the tufte version changes
+knitr::opts_chunk$set(tidy = FALSE, cache.extra = packageVersion('tufte'))
+options(htmltools.dir.version = FALSE)
+```
+
+# Einführung
+
+Zunächst lese ich einen Datensatz ein. 
+
+```{r, message = FALSE}
+cohviz <- read_csv("cohviz_processed.csv") 
+revision <- cohviz %>% 
+  filter(measure == "revision")
+revision$treatment <- factor(revision$treatment)
+```
+
+Es ist wichtig, dass ich zu Beginn Summenkontraste bilde. Der Default von R ist ein anderer. 
+
+```{r, message = FALSE}
+afex::set_sum_contrasts()
+```
+
+Ich möchte nun ein einfaches lineares Modell bilden. Ich möchte heraus finden, ob es einen Unterschied der Treatmentgruppen hinsichtlich der lokalen Kohäsion gibt:
+
+```{r}
+lm(local_cohesion ~ treatment, data = revision)
+```
+
+Das Modell spuckt mir die Beta-Koeffizienten aus. Bei Summenkontrasten ist der Intercept in der Regel der Mittelwert der Mittelwerte der einzelnen Faktorengruppen. Hier der Mittelwert der Mittelwerte der lokalen Kohäsion der Versuchsgruppen. 
+
+```{r}
+(mean_per_group <- revision %>% group_by(treatment) %>%
+  summarise(mean_local_cohesion = mean(local_cohesion)))
+```
+
+Beweis: 
+
+```{r}
+mean_per_group$mean_local_cohesion %>% mean
+```
+
+Das ist in der Tat der Intercept des Modells. Im Hintergrund ändert R die Treatments zu Dummy-Variablen. 
+
+```{r}
+contrasts(revision$treatment)
+```
+
+Diese kann ich frei ändern. Zum Beispiel kann ich sagen, dass der erste Beta-Koeffizient die Cmap-Gruppen mit den restlichen Gruppen vergleichen soll. Der zweite Koeffizient soll die erste Cmap-Gruppe mit der zweiten Cmap-Gruppe vergleichen. Der dritte Koeffizient vergleicht die Kontrollgruppe mit der integrierten Bedingung. 
+
+```{r}
+contrasts(revision$treatment) <- cbind(c(1, 1, -1, -1), c(-1, 1, 0, 0), c(0, 0, -1, 1))
+contrasts(revision$treatment)
+```
+
+Wenn ich nun das Modell neu aufsetze, ändern sich dadurch die Koeffizienten:
+
+```{r}
+(model <- lm(local_cohesion ~ treatment, data = revision))
+```
+
+Den Mittelwert der Cmap-Gruppe kann ich nun bekommen, indem ich den ersten Koeffizienten auf 1 setze, den zweiten auf -1 setze und den dritten auf 0 setze:
+
+```{r}
+model$coefficients[1] + model$coefficients[2] - model$coefficients[3]
+revision %>% filter(treatment == "cmap") %>% .$local_cohesion %>% mean
+```
+
+Voilà. Jetzt möchte ich gerne wissen, ob die Kontraste signifikant sind. 
+
+```{r}
+model %>% Anova(., type = 3)
+```
+
+Nein, es gibt keine signifikanten Unterschiede zwischen den Gruppen. Trotzdem möchte ich einmal die Unterschiede der Gruppen genauer betrachten^[Mehr Informationen hier [blogs.uregon.edu](https://blogs.uoregon.edu/rclub/2015/11/03/anova-contrasts-in-r/)].
+
+```{r}
+model %>% summary.aov(split = list(
+  treatment = list("Cmap vs. noncmap" = 1,
+                   "cmap vs. cmapcolorcoding" = 2,
+                   "control vs. integrated" = 3)
+))
+```
+
+Ich versuche einmal einen weiteren unabhängige Variable hinzu zu nehmen. Ich kann den Effekt doch anhand der Anzahl der Cluster kontrollieren:
+
+```{r}
+lm(local_cohesion ~ treatment + num_clusters, data = revision) %>%
+  summary.aov(split = list(
+    treatment = list("Cmap vs. noncmap" = 1,
+                     "cmap vs. cmapcolorcoding" = 2,
+                     "control vs. integrated" = 3)
+    ))
+```
+
+Tatsächlich ändern sich die Gruppenunterschiede, wenn ich für die Anzahl der Cluster kontrolliere. Viel mehr Sinn würde es allerdings machen, wenn ich für die lokale Kohäsion beim initialen Draft kontrolliere. Lass uns das versuchen. 
+
+
+```{r}
+draft <- cohviz %>% 
+  filter(measure == "draft") %>%
+  select(id, local_cohesion, treatment)
+revision_new <- revision %>% inner_join(draft, by = "id")
+revision_new$treatment.x <- factor(revision_new$treatment.x)
+```
+
+Jetzt haben wir die Daten für die Regression zusammen gefügt. 
+
+```{r}
+# Konstraste neu setzen
+contrasts(revision_new$treatment.x) <- cbind(c(-1, 1, 0, 0), 
+                                             c(0, 0, -1, 1),
+                                             c(-1, 0, 0, 1))
+contrasts(revision_new$treatment.x)
+
+lm(local_cohesion.x ~ treatment.x + local_cohesion.y, data = revision_new) %>%
+  summary.aov(split = list(
+    treatment.x = list("Cmap vs. noncmap" = 1,
+                     "control vs. integrated" = 2,
+                     "cmap-signaling vs. control" = 3)
+    ))
+```
+
+
