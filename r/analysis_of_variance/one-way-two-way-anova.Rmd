@@ -1,0 +1,152 @@
+---
+title: "One-way and two-way analysis of variance"
+subtitle: "Ein ausführliches Beispiel"
+author: "JJ Allaire and Yihui Xie"
+date: "`r Sys.Date()`"
+output:
+  tufte::tufte_html: default
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+library(tufte)
+# invalidate cache when the tufte version changes
+knitr::opts_chunk$set(tidy = FALSE, cache.extra = packageVersion('tufte'))
+options(htmltools.dir.version = FALSE)
+```
+
+# Einführung
+
+```{r, message=FALSE}
+library(tidyverse)
+library(car)
+library(emmeans)
+library(sjstats)
+afex::set_sum_contrasts()
+```
+
+Beginnen wir mit einem einfachen Beispiel. Unser Datensatz beschäftigt sich mit der Ernährung von Menschen.
+
+```{r, message=FALSE}
+diet <- read_csv("diet.csv")
+glimpse(diet)
+```
+
+Die Variable `weight6weeks` gibt an, wie viel jemand nach 6 Wochen Diät gewogen hat. Der erste Gewichtswert steckt in der Variable `pre.weight`. Wir wollen testen, inwieweit sich die verschiedenen Diäten auf das Gewicht ausgewirkt haben. Dazu müssen wir die Gewichtsdifferenz berechnen:
+
+```{r}
+diet <- diet %>%
+  mutate(
+    diff = weight6weeks - pre.weight,
+    Diet = factor(Diet)
+  )
+```
+
+Die Variable gibt nun an, ob jemand zu- oder abgenommen hat. Ein positiver Wert bedeutet, dass jemand zugenommen hat. Ein negativer Wert bedeutet, dass jemand abgenommen hat. 
+
+# One-Way Anova - Einfaktorielle Varianzanalyse
+
+## EDA Faktor 
+
+Wir möchten nun heraus finden, ob die Diät ein signifikanter Prädiktor des Gewichts ist. Schauen wir uns zunächst die Gewichtsunterschiede mit Boxplots an:
+
+```{r boxplot1, fig.margin = TRUE, fig.cap = "Boxplot mit Ausreißern.", fig.width=3.5, fig.height=3.5, cache=TRUE}
+ggplot(diet, aes(Diet, diff, group = Diet)) +
+  geom_boxplot(aes(fill = Diet))
+```
+
+Es gibt zwei Ausreißer in der ersten Gruppe. Nehmen wir diese Ausreißer heraus.
+
+```{r}
+diet_no_outlier <- diet %>%
+  filter(!(Diet == "1" & diff < -7.5))
+```
+
+```{r boxplot2, fig.margin = TRUE, fig.cap = "Boxplot ohne Ausreißer", fig.width=3.5, fig.height=3.5, cache=TRUE}
+ggplot(diet_no_outlier, aes(Diet, diff, group = Diet)) +
+  geom_boxplot(aes(fill = Diet))
+```
+
+Jetzt haben wir eine bessere Repräsentation der Daten. 
+
+## Assumptions
+
+Bevor wir etwas Rechnen, sollten wir die Annahmen prüfen^[Mehr Informationen [hier](https://statistics.laerd.com/spss-tutorials/one-way-anova-using-spss-statistics.php)]. 
+
+### Normalverteilung der abhängigen Variable
+
+```{r histogram, fig.margin = TRUE, fig.cap = "Histogram abhängige Variable", fig.width=3.5, fig.height=3.5, cache=TRUE}
+ggplot(diet_no_outlier, aes(x = diff)) +
+  geom_histogram()
+```
+
+Sieht gut aus.
+
+### Homogeneity of variance
+
+Die Varianzen der unterschiedlichen Gruppen sollten ähnlich sein. Am einfachsten kann man das mit dem Levene-Test testen:
+
+```{r}
+leveneTest(diff ~ Diet, data = diet_no_outlier)
+```
+
+Die Varianzen sind unterschiedlich, aber eben nicht signifikant. Wir können daher mit Vorsicht die Annahme der Varianzhomogenität zwischen den Gruppen annehmen. 
+
+## Regressionsmodel
+
+Später möchten wir Kontraste rechnen, da Annahmen über die Effektivität der Diäten haben. Wir glauben, dass Diät 1 > Diät 2 > Diät 3. Wir testen daher Diät 1 gegen Diät 2 und Diät 2 gegen Diät 3. 
+
+```{r}
+contrasts(diet_no_outlier$Diet)
+```
+
+Monentan wird Gruppe 1 mit Gruppe 3 und Gruppe 2 mit Gruppe 3 verglichen. Ändern wir das.
+
+```{r}
+contrasts(diet_no_outlier$Diet) <- 
+  cbind(c(1, -1, 0), c(0, 1, -1))
+contrasts(diet_no_outlier$Diet)
+```
+
+Voilà. Unser Faktor hat die richtigen Kontraste. Nun können wir unser Modell bauen:
+
+```{r}
+(model <- lm(diff ~ Diet, data = diet_no_outlier, 
+             contrasts = list(Diet = contrasts(diet_no_outlier$Diet))))
+```
+
+Um heraus zu finden, ob es signifikante Unterschiede zwischen den Gruppen gibt, müssen wir die `Anova` Funktion über das Modell laufen lassen:
+
+```{r}
+model %>% Anova(., type = 3)
+```
+
+Die Ergebnisse sind hochsignifikant. Die Diät hat anscheinend einen Einfluss auf die Gewichtszu- oder abnahme. Mal sehen, welche der Kontraste signifikant ist:
+
+```{r}
+model %>% summary.aov(split = list(
+  Diet = list("1 vs. 2" = 1,
+              "2 vs. 3" = 2)
+  ))
+```
+
+Der Unterschied zwischen Diät 1 und Diät 2 ist nicht signifikant. Der Unterschied zwischen Diät 2 und Diät 3 ist signifikant. 
+
+```{r}
+model %>% emmeans("Diet") %>%
+  pairs
+```
+
+Die Werte passen nun gut zusammen. Zum Schlüss müssen wir sehen, wie groß die Effekte sind:
+
+```{r}
+eta_sq(model)
+```
+
+Es handelt sich um eine mittlere Effektgröße. 

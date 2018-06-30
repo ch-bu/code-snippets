@@ -1,0 +1,15 @@
+base
+tufte
+tidyverse
+ggplot2
+tibble
+tidyr
+readr
+purrr
+dplyr
+car
+bindrcpp
+stringr
+forcats
+emmeans
+sjstats

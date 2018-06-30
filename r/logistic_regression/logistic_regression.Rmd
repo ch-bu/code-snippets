@@ -24,7 +24,7 @@ options(htmltools.dir.version = FALSE)
 ```{r, message=FALSE}
 library(ISLR)
 library(tidyverse)
-library(plotly)
+library(emmeans)
 ```
 
 # Der Datensatz
