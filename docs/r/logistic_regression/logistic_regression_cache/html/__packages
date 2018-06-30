@@ -1,0 +1,12 @@
+base
+tufte
+ISLR
+tidyverse
+ggplot2
+tibble
+tidyr
+readr
+purrr
+dplyr
+plotly
+bindrcpp

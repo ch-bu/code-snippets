@@ -1,0 +1,135 @@
+---
+title: "Logistische Regression"
+subtitle: "Ein Beispiel"
+author: "Christian Burkhart"
+date: "`r Sys.Date()`"
+output:
+  tufte::tufte_html: default
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+library(tufte)
+# invalidate cache when the tufte version changes
+knitr::opts_chunk$set(tidy = FALSE, cache.extra = packageVersion('tufte'))
+options(htmltools.dir.version = FALSE)
+```
+
+```{r, message=FALSE}
+library(ISLR)
+library(tidyverse)
+library(plotly)
+```
+
+# Der Datensatz
+
+Wir müssen zunächst einen Datensatz generieren, den wir für unser logistisches Regressionsmodell verwenden können. Folgende Variablen verwenden wir:
+
+* Abhängige Variable (ability): Kann die Lernende, einen Aufgabentyp lösen? 
+* Unabhängige Variable 1 (time): Die durchschnittliche Zeit der Lösung der letzten 8 Aufgaben. 
+* Unabhängige Variable 2 (correct): Der prozentuale Wert der richtigen Aufgaben der letzten 8 Aufgaben. 4/8 würde zum Beispiel bedeuten, dass die Hälfte der letzten 8 Aufgaben richtig gelöst wurden. 
+
+Wir erstellen einen willkürlichen Datensatz mit den drei Variablen und speichern diesen als Tibble (eine Art Dataframe).
+
+```{r}
+(learning_data <- tibble(
+    ability = c("able", "able", "unable", 
+                "able", "able", "unable",
+                "unable", "unable", "able",
+                "able"),
+    time    = c(20, 8, 25, 
+                11, 8, 22, 
+                9, 50, 34, 
+                10),
+    correct = c(0.8, 0.9, 0.4, 
+                0.6, 0.6, 0.2,
+                0.4, 0.5, 0.6, 
+                0.3)
+  ) %>%
+   mutate(
+    ability = factor(ability)
+   ))
+```
+
+Noch einen kurzen Blick auf den Datensatz:
+
+```{r}
+glimpse(learning_data)
+```
+
+
+Der Datensatz enthält Daten von 10 Lernenden, von denen wir wissen, ob sie eine Aufgabe können oder nicht können. Anhand diesen Datensatzes trainieren wir nun das logistische Modell. 
+
+
+# Logistisches Regressionsmodell
+
+Für das Modell verwenden wir die Funktion glm (general linear models)^[Mehr Informationen findet man [hier](https://www.datacamp.com/community/tutorials/logistic-regression-R)]. 
+
+```{r}
+(model <- glm(ability ~ time + correct, 
+             data = learning_data,
+             family = "binomial"))
+```
+
+```{r}
+model %>% summary
+```
+
+Nachdem wir das Modell berechnet haben, können wir schauen, wie gut es ist. Dazu müssen wir das Modell anhand von neuen Daten testen. Ermittelen wir daher einen neuen Datensatz von 10 Personen.
+
+```{r}
+(learning_data_test <- tibble(
+    ability = c("unable", "able", "unable", 
+                "able", "able", "unable",
+                "unable", "able", "able",
+                "able"),
+    time    = c(18, 6, 20, 10, 8, 19, 
+                30, 6, 9, 9),
+    correct = c(0.2, 0.9, 0.4, 0.8, 0.8, 0.1,
+                0.3, 0.9, 0.4, .7)
+  ) %>%
+   mutate(
+    ability = factor(ability)
+   ))
+glimpse(learning_data_test)
+```
+
+# Testen des Modells
+
+Im nächsten Schritt versuchen wir die abhängige Variable auf Grundlage unseres Modells hervorzusagen:
+
+```{r}
+(probabilities <- predict(model, 
+                      newdata = learning_data_test,
+                      type = "response"))
+```
+
+
+Diese Funktion lieft uns nun die Wahrscheinlichkeiten, ob jemand einen Aufgabentypus beherrscht. Höhere Werte bedeuten, dass jemand die Aufgaben nicht beherrscht. Der Wert .3 zum Beispiel sagt uns, dass jemand eine 70%-tige Wahrscheinlichkeit hat, den Aufgabentypus zu lösen. Wir müssen ein Cutoff-Kriterium finden, welches darüber entscheidet, ob jemand eine Aufgabe lösen können. Wir wählen einmal .8 als Cutoff. Nun können wir abhängig von diesen Werten berechnen, ob unser Modell annimmt, dass jemand einen Aufgabentypus beherrscht. 
+
+```{r}
+(predictions <- ifelse(probabilities > .8, "unable", "able"))
+```
+
+Wie gut ist aber unser Modell? Dazu können wir uns einfach eine Tabelle ausspucken, die uns die false negatives und die false positives ausspuckt:
+
+```{r}
+(results <- table(predictions, learning_data_test$ability))
+```
+
+Wir haben insgesamt `r results[1, 2]` false positives. False positives bedeutet, dass wir berechnen, dass jemand einen Aufgabentypus beherrscht, die Person es allerdings nicht kann. Wir haben `r results[2, 1]` false negatives. Wir gehen nicht, davon aus, dass die Person die Aufgabe kann, aber in Wirklichkeit kann die Person die Aufgabe. Wir können die Ergebnisse noch weiter formalisieren. Die Akkuratheit sind die true positives durch alle Hervorsagen:
+
+```{r}
+((results[1, 1] + results[2, 2]) / sum(results))
+```
+
+Die Akkuratheit gibt uns an, wie gut unser Modell ist. Ein hoher Wert bedeutet, dass wir sehr gut abschätzen können, ob jemand einen Aufgabentypus beherrscht, ein niedriger Wert bedeutet, dass wir nur schlecht schätzen können, ob jemand einen Aufgabentypus beherrscht. 
+
+
+
