@@ -1,7 +1,7 @@
 ---
 title: "One-way and two-way analysis of variance"
 subtitle: "Ein ausführliches Beispiel"
-author: "JJ Allaire and Yihui Xie"
+author: "Christian Burkhart"
 date: "`r Sys.Date()`"
 output:
   tufte::tufte_html: default
@@ -44,7 +44,8 @@ Die Variable `weight6weeks` gibt an, wie viel jemand nach 6 Wochen Diät gewogen
 diet <- diet %>%
   mutate(
     diff = weight6weeks - pre.weight,
-    Diet = factor(Diet)
+    Diet = factor(Diet),
+    gender = factor(gender)
   )
 ```
 
@@ -150,3 +151,75 @@ eta_sq(model)
 ```
 
 Es handelt sich um eine mittlere Effektgröße. 
+
+## Two Way Anova - Zweifaktorielle Varianzanalyse
+
+Bei einer zweifaktoriellen Varianzanalyse wird der Einfluss zweier kategorialer Faktoren auf eine unabhängige Variable getestet. Der zweite Faktor in unserem Beispiel ist das Geschlecht. Ist das Geschlecht ein signifikanter Prädiktor auf die Gewichtsveränderung? Zusätzlich nehmen wir eine Interaktion an. Schauen wir uns zunächst die Kontraste der Variable an:
+
+```{r}
+contrasts(diet_no_outlier$gender)
+```
+
+Bevor wir das Modell machen, brauchen wir einen Levene-Test.
+
+```{r}
+leveneTest(diff ~ gender, data = diet_no_outlier)
+```
+
+Nein, auch hier gibt es gleiche Varianzen zwischen den Gruppen. 
+
+Klar, beide Geschlechter werden gegeneinander getestet. Bilden wir zunächst das Modell:
+
+```{r}
+(model2 <- lm(diff ~ Diet*gender, data = diet_no_outlier,
+             contrasts = list(Diet = contrasts(diet_no_outlier$Diet),
+                              gender = contrasts(diet_no_outlier$gender))))
+```
+
+Zunächst schauen wir, ob die Haupteffekte und der Interaktionseffekt signifikant ist.
+
+```{r}
+model2 %>% Anova(., type = 3)
+```
+
+Das Geschlecht scheint kein Prädiktor für die Gewichtsveränderung zu sein. Aber es gibt eine Interaktion. Das bedeutet, dass der Einfluss der Diet auf die Gewichtsveränderung vom Geschlecht abhängig. Schauen wir uns diese Interaktion einmal an. 
+
+```{r}
+conf_intervals <- model2 %>% emmeans(~ Diet | gender) %>% data.frame(.)
+
+ggplot(conf_intervals, aes(x = gender, emmean, group = Diet)) +
+  geom_line(aes(color = Diet)) +
+  geom_point(size = 2, alpha = .8) +
+  xlab("Geschlecht") +
+  ylab("Gewichtsveränderung") +
+  ggtitle("Interaktion Gewichtsveränderung - Mann vs. Frau")
+```
+
+Bei den Frauen scheint die Diät 2 besser anzuschlagen als bei den Männern. Diät 1 und Diät 2 scheinen gleich gut zu sein. Wenn wir keine Interaktion hätten, müsssten die Slops bei 0 sein, sind sie aber nicht. Als nächstes untersuchen wir sie Simple Effects der Männer und Frauen^[Mehr Informationen [hier](https://www.spss-tutorials.com/spss-two-way-anova-interaction-significant/)]. 
+
+### Simple Effects
+
+```{r}
+male <- diet_no_outlier %>% filter(gender == 0)
+female <- diet_no_outlier %>% filter(gender == 1)
+(model_male <- lm(diff ~ Diet, data = male, 
+             contrasts = list(Diet = contrasts(male$Diet))))
+(model_female <- lm(diff ~ Diet, data = female, 
+             contrasts = list(Diet = contrasts(male$Diet))))
+```
+
+
+```{r}
+model_male %>% Anova(., type = 3)
+eta_sq(model_male)
+```
+
+Bei den Männern finden wir einen Haupteffekt der Diät. Der Effekt ist sehr groß. 
+
+```{r}
+model_female %>% Anova(., type = 3)
+```
+
+Tatsächlich gibt es bei den Frauen keinen Haupteffekt der Diät. Jede Diät scheint gleich gut zu wirken. 
+
+
