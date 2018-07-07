@@ -1,0 +1,102 @@
+---
+title: "Repeated measures Anova"
+author: "Christian Burkhart"
+date: "`r Sys.Date()`"
+output:
+  tufte::tufte_html: default
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+library(tufte)
+# invalidate cache when the tufte version changes
+knitr::opts_chunk$set(tidy = FALSE, cache.extra = packageVersion('tufte'))
+options(htmltools.dir.version = FALSE)
+```
+
+# Einführung
+
+In diesem Skript führen wir eine einfache Repeated Measures Anova durch. Die Daten sind Cholesterinwerte über mehrere Wochen von eine paar Patienten. 
+
+```{r, message=FALSE}
+library(tidyverse)
+library(car)
+library(emmeans)
+library(conflicted)
+library(sjstats)
+library(afex)
+afex::set_sum_contrasts()
+```
+
+Beginnen wir mit einem einfachen Beispiel. Unser Datensatz beschäftigt sich mit der Ernährung von Menschen.
+
+```{r, message=FALSE}
+cholesterol <- read_csv("cholesterol.csv") %>%
+  mutate(
+    Margarine = factor(Margarine),
+    ID        = factor(ID)
+  )
+glimpse(cholesterol)
+```
+
+Insgesamt gibt es 3 Messzeitpunkte. Initial und je 4 Wochen nach Beginn der Diät. Die Variable Margarine vernachlässigen wir einmal. Diesen Hauptfaktor schauen wir uns im nächsten Schritt an. Dann hätten wir eine One-Way Anova mit Repeated Measures. 
+
+Zunächst sollten wir uns die Daten einmal ansehen. Dafür sollten wir die Daten aber in das richtige Format für R bringen:
+
+```{r}
+# Data to long format
+cholesterol_long <- cholesterol %>%
+  gather(time, cholesterol, -ID, -Margarine,
+         factor_key = TRUE)
+```
+
+Nun können wir die Daten auch in einem Boxplot darstellen. 
+
+```{r}
+ggplot(cholesterol_long, aes(x = time, y = cholesterol)) +
+  geom_boxplot(aes(fill = time)) +
+  guides(fill = FALSE)
+```
+
+Es scheint ein wenig so, als würde der Cholesterinspiegel nach 4 Wochen sinken, dann aber gleich bleiben. Wir möchten nun heraus finden, ob diese Veränderung auch signifikant ist. Dazu brauchen wir ein Repeated-Measures Design. Wir verwenden hierfür afex^[[afex](https://www.psychologie.uni-heidelberg.de/ae/meth/team/mertens/blog/anova_in_r_made_easy.nb.html)]. 
+
+
+```{r}
+# model <- aov(cholesterol ~ time + Error(ID/time), 
+#              data = cholesterol_long)
+(model2 <- aov_car(cholesterol ~ Error(ID|time),
+                  data = cholesterol_long))
+(model3 <- aov_ez(id = "ID", dv = "cholesterol", 
+                 data = cholesterol_long, 
+                 within = "time"))
+model3 %>% summary
+```
+
+Es scheint einen signifikanten Effekt des Faktors time zu geben. Die Annahme, dass die Diät keinen Einfluss auf den Cholesterinspiegel hat, kann wiederrufen werden. Die Diät scheint den Cholesterinspiegel über die Wochen zu ändern. Aber wie? 
+
+Wir können uns die Konfidenzintervalle des Modells einmal genauer ansehen.
+
+```{r}
+conf_intervals <- model3 %>% lsmeans(specs = c("time")) %>% data.frame()
+ggplot(conf_intervals, aes(x = time, y = lsmean)) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), 
+                width = .2) +
+  geom_point(size = 3)
+```
+
+Als nächstes schauen wir uns an, welche Zeitpunkte signifikant unterschiedlich voneinander sind. 
+
+```{r}
+model3 %>% lsmeans(specs = c("time")) %>%
+  pairs
+```
+
+Der Post-Hoc Test zeigt, dass sich der erste vom zweiten und der erste vom dritten Messzeitpunkt signifikant unterscheiden. 
+
+
